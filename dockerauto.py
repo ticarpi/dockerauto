@@ -106,7 +106,7 @@ def mode_install(json):
         
 def checkwsl():
     if os.environ.get('WSL_DISTRO_NAME'):
-        for path in ['mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', 'mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe']
+        for path in ['mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', 'mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe']:
                 if os.path.exists(path):
                     powershellcmd = path
     return powershellcmd
