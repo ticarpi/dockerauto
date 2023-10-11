@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 0.2 (11_10_2023)
+# DockerAuto version 0.3 (11_10_2023)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "0.2"
+dockerautovers = "0.3"
 import os
 #import subprocess
 #import re
@@ -90,7 +90,7 @@ def saveconfig(json):
 
 def mode_install(json):
     if shutil.which('dockerauto') is None:
-        os.system('sudo ln -s /opt/dockerauto/dockerauto.py /usr/bin/dockerauto')
+        os.system('sudo ln -s '+os.getcwd()+'/dockerauto.py /usr/bin/dockerauto')
         print('[+] DockerAuto now installed via simlink to /usr/bin/dockerauto, you can now run with:\n$ dockerauto [args]')
     #jsonpath=os.path.expanduser('~/dockerlist.json')
     if os.path.exists(configfile):
@@ -123,7 +123,13 @@ def checkdeps():
         exit(1)
 
 
-logo = "\t[DockerAuto Logo_Not_Found]\n@ticarpi\t\tversion "+dockerautovers+"\n"
+#logo = "\t[DockerAuto Logo_Not_Found]\n@ticarpi\t\tversion "+dockerautovers+"\n"
+logo="\n██████   ██████   ██████ ██   ██ ███████ ██████   █████  ██    ██ ████████  ██████  \n"
+logo+="██   ██ ██    ██ ██      ██  ██  ██      ██   ██ ██   ██ ██    ██    ██    ██    ██ \n"
+logo+="██   ██ ██    ██ ██      █████   █████   ██████  ███████ ██    ██    ██    ██    ██ \n"
+logo+="██   ██ ██    ██ ██      ██  ██  ██      ██   ██ ██   ██ ██    ██    ██    ██    ██ \n"
+logo+="██████   ██████   ██████ ██   ██ ███████ ██   ██ ██   ██  ██████     ██     ██████  \n"
+logo+="\t@ticarpi\t\t\t\t\t\tversion "+dockerautovers+"\n"
 
 if __name__ == '__main__':
     print(logo)
