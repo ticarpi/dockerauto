@@ -28,7 +28,7 @@ def run_update(dockerlist_json, updateitem):
 def mode_update(dockeritem):
     with open(configfile, "r") as dockerlist:
         dockerlist_json = json.load(dockerlist)
-    if dockeritem == 'ALL':
+    if dockeritem == 'ALL' or dockeritem == 'all':
         print("[+] Updating all of the following:")
         for key in dockerlist_json['dockeritems'].keys():
             print("    [*] "+key)
