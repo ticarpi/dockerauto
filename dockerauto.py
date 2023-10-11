@@ -22,7 +22,7 @@ def run_update(dockerlist_json, updateitem):
     try:
         print("\n[+] Running docker update command for "+updateitem)
         if powershellcmd:
-            cmd = powershellcmd+'-c \''+dockerlist_json['dockeritems'][updateitem][3]+'\''
+            cmd = powershellcmd+' -c \''+dockerlist_json['dockeritems'][updateitem][3]+'\''
         else:
             cmd = dockerlist_json['dockeritems'][updateitem][3]
         os.system(cmd)
@@ -53,7 +53,7 @@ def mode_run(dockeritem, args):
     try:
         print("[+] Running docker command for "+dockeritem)
         if powershellcmd:
-            cmd = powershellcmd+'-c \''+dockerlist_json['dockeritems'][dockeritem][1]+' '+args+'\''
+            cmd = powershellcmd+' -c \''+dockerlist_json['dockeritems'][dockeritem][1]+' '+args+'\''
         else:
             cmd = dockerlist_json['dockeritems'][dockeritem][1]+' '+args
         os.system(cmd)
@@ -106,9 +106,16 @@ def mode_install(json):
 def checkwsl():
     powershellcmd = ''
     if os.environ.get('WSL_DISTRO_NAME'):
-        for path in ['mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', 'mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe']:
+        print('[+] WSL detected, checking for PowerShell path...')
+        for path in ['/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', '/mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe']:
                 if os.path.exists(path):
                     powershellcmd = path
+                    break
+    
+    if powershellcmd:
+        print('    [*] PowerShell path: '+powershellcmd)
+    else:
+        print("[-] PowerShell couldn't be found, trying with WSL2 Docker instead.\n")
     return powershellcmd
 
 def checkdeps():
@@ -134,9 +141,6 @@ logo+="\t@ticarpi\t\t\t\t\t\tversion "+dockerautovers+"\n"
 if __name__ == '__main__':
     print(logo)
     powershellcmd = checkwsl()
-    print('powershell: '+powershellcmd)
-    if powershellcmd:
-        print('WSL detected, using PowerShell on host for compatibility:\n'+powershellcmd+'\n')
     checkdeps()
     parser = argparse.ArgumentParser(epilog="OK, bye", formatter_class=argparse.RawTextHelpFormatter)
     subparsers = parser.add_subparsers(dest='mode',required=True)
