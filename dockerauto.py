@@ -17,7 +17,6 @@ import argparse
 import shutil
 
 configfile = os.path.expanduser('~/dockerlist.json')
-powershellcmd = ''
 
 def run_update(dockerlist_json, updateitem):
     try:
@@ -26,7 +25,7 @@ def run_update(dockerlist_json, updateitem):
             cmd = powershellcmd+'\''+dockerlist_json['dockeritems'][updateitem][3]+'\''
         else:
             cmd = dockerlist_json['dockeritems'][updateitem][3]
-        os.system()
+        os.system(cmd)
     except:
         print('[-] The specified tool ('+updateitem+') could not be updated')
 
@@ -105,6 +104,7 @@ def mode_install(json):
         saveconfig(json)
         
 def checkwsl():
+    powershellcmd = ''
     if os.environ.get('WSL_DISTRO_NAME'):
         for path in ['mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', 'mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe']:
                 if os.path.exists(path):
