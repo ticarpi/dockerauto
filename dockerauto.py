@@ -134,6 +134,7 @@ logo+="\t@ticarpi\t\t\t\t\t\tversion "+dockerautovers+"\n"
 if __name__ == '__main__':
     print(logo)
     powershellcmd = checkwsl()
+    print('powershell: '+powershellcmd)
     if powershellcmd:
         print('WSL detected, using PowerShell on host for compatibility:\n'+powershellcmd+'\n')
     checkdeps()
