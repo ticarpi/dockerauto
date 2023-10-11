@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 0.1 (10_10_2023)
+# DockerAuto version 0.2 (11_10_2023)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "0.1"
+dockerautovers = "0.2"
 import os
 #import subprocess
 #import re
@@ -17,11 +17,16 @@ import argparse
 import shutil
 
 configfile = os.path.expanduser('~/dockerlist.json')
+powershellcmd = ''
 
 def run_update(dockerlist_json, updateitem):
     try:
         print("\n[+] Running docker update command for "+updateitem)
-        os.system(dockerlist_json['dockeritems'][updateitem][3])
+        if powershellcmd:
+            cmd = powershellcmd+'\''+dockerlist_json['dockeritems'][updateitem][3]+'\''
+        else:
+            cmd = dockerlist_json['dockeritems'][updateitem][3]
+        os.system()
     except:
         print('[-] The specified tool ('+updateitem+') could not be updated')
 
@@ -48,7 +53,11 @@ def mode_run(dockeritem, args):
         dockerlist_json = json.load(dockerlist)
     try:
         print("[+] Running docker command for "+dockeritem)
-        os.system(dockerlist_json['dockeritems'][dockeritem][1]+' '+args)
+        if powershellcmd:
+            cmd = powershellcmd+'\''+dockerlist_json['dockeritems'][dockeritem][1]+' '+args+'\''
+        else:
+            cmd = dockerlist_json['dockeritems'][dockeritem][1]+' '+args
+        os.system(cmd)
     except:
         print("The specified tool ("+dockeritem+") could not be run. Try one of the following:")
         for key in dockerlist_json['dockeritems'].keys():
@@ -94,10 +103,17 @@ def mode_install(json):
             exit(1)
     else:
         saveconfig(json)
+        
+def checkwsl():
+    if os.environ.get('WSL_DISTRO_NAME'):
+        for path in ['mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', 'mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe']
+                if os.path.exists(path):
+                    powershellcmd = path
+    return powershellcmd
 
 def checkdeps():
     errors=0
-    if shutil.which('docker') is None:
+    if shutil.which('docker') is None and not powershellcmd:
         print('[-] Docker NOT installed.\nThis is a requirement for a tool that runs Docker containers.\n\nOn Kali and other Linux distros that use the APT package manager you can install this and configure it by running the following command:\nsudo apt update && sudo apt install docker.io -y && sudo usermod -aG docker $USER\n')
         errors+=1
     if shutil.which('git') is None:
@@ -111,6 +127,7 @@ logo = "\t[DockerAuto Logo_Not_Found]\n@ticarpi\t\tversion "+dockerautovers+"\n"
 
 if __name__ == '__main__':
     print(logo)
+    powershellcmd = checkwsl()
     checkdeps()
     parser = argparse.ArgumentParser(epilog="OK, bye", formatter_class=argparse.RawTextHelpFormatter)
     subparsers = parser.add_subparsers(dest='mode',required=True)
@@ -142,16 +159,3 @@ if __name__ == '__main__':
         print('list configs and images')
     elif args.mode == 'run':
         mode_run(args.dockeritem, args.args)
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-
