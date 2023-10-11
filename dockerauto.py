@@ -135,7 +135,7 @@ if __name__ == '__main__':
     print(logo)
     powershellcmd = checkwsl()
     if powershellcmd:
-        print('WSL detected, using PowerShell on host for compatibility:\n'+powershellcmd+')
+        print('WSL detected, using PowerShell on host for compatibility:\n'+powershellcmd+'\n')
     checkdeps()
     parser = argparse.ArgumentParser(epilog="OK, bye", formatter_class=argparse.RawTextHelpFormatter)
     subparsers = parser.add_subparsers(dest='mode',required=True)
