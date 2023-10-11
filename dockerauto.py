@@ -67,9 +67,9 @@ def mode_info(dockeritem):
         dockerlist_json = json.load(dockerlist)
     if dockeritem in dockerlist_json['dockeritems']:
         try:
-            print("[+] Info for: "+dockeritem+" (Last updated: "+dockerlist_json['dockeritems'][dockeritem][5]+")\n")
+            print("[+] Info for: "+dockeritem+" (Last updated: "+dockerlist_json['dockeritems'][dockeritem][5]+")")
             print("    [*] Description: "+dockerlist_json['dockeritems'][dockeritem][0])
-            print("    [*] Usage Notes: "+dockerlist_json['dockeritems'][dockeritem][2])
+            print("    [*] Usage Notes:\n        [*] "+dockerlist_json['dockeritems'][dockeritem][2].replace(';','\n        [*] '))
             print("    [*] Command: "+dockerlist_json['dockeritems'][dockeritem][1])
             print("    [*] Update command: "+dockerlist_json['dockeritems'][dockeritem][3])
             print("    [*] Dockerfile Generation Script: "+dockerlist_json['dockeritems'][dockeritem][4])
@@ -82,7 +82,7 @@ def mode_info(dockeritem):
 
 def saveconfig(json):
     jsonfile=os.getcwd()+'/'+json
-    print('[+] Saving config\nfrom: '+jsonfile+'\nto: '+configfile+'\n')
+    print('\n[+] Saving config\nfrom: '+jsonfile+'\nto: '+configfile+'\n')
     try:
         shutil.copy2(jsonfile, configfile)
     except:
@@ -113,7 +113,7 @@ def checkwsl():
                     break
     
     if powershellcmd:
-        print('    [*] PowerShell path: '+powershellcmd)
+        print('    [*] PowerShell path: '+powershellcmd+'\n')
     else:
         print("[-] PowerShell couldn't be found, trying with WSL2 Docker instead.\n")
     return powershellcmd
