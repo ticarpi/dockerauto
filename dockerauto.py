@@ -22,7 +22,7 @@ def run_update(dockerlist_json, updateitem):
     try:
         print("\n[+] Running docker update command for "+updateitem)
         if powershellcmd:
-            cmd = powershellcmd+'\''+dockerlist_json['dockeritems'][updateitem][3]+'\''
+            cmd = powershellcmd+'-c \''+dockerlist_json['dockeritems'][updateitem][3]+'\''
         else:
             cmd = dockerlist_json['dockeritems'][updateitem][3]
         os.system(cmd)
@@ -53,7 +53,7 @@ def mode_run(dockeritem, args):
     try:
         print("[+] Running docker command for "+dockeritem)
         if powershellcmd:
-            cmd = powershellcmd+'\''+dockerlist_json['dockeritems'][dockeritem][1]+' '+args+'\''
+            cmd = powershellcmd+'-c \''+dockerlist_json['dockeritems'][dockeritem][1]+' '+args+'\''
         else:
             cmd = dockerlist_json['dockeritems'][dockeritem][1]+' '+args
         os.system(cmd)
@@ -90,7 +90,7 @@ def saveconfig(json):
 
 def mode_install(json):
     if shutil.which('dockerauto') is None:
-        os.system('sudo ln -s /opt/dockerauto/dockerauto.py /usr/bin/dockerauto')
+        os.system('sudo ln -s '+os.getcwd()+'/dockerauto.py /usr/bin/dockerauto')
         print('[+] DockerAuto now installed via simlink to /usr/bin/dockerauto, you can now run with:\n$ dockerauto [args]')
     #jsonpath=os.path.expanduser('~/dockerlist.json')
     if os.path.exists(configfile):
@@ -123,11 +123,19 @@ def checkdeps():
         exit(1)
 
 
-logo = "\t[DockerAuto Logo_Not_Found]\n@ticarpi\t\tversion "+dockerautovers+"\n"
+#logo = "\t[DockerAuto Logo_Not_Found]\n@ticarpi\t\tversion "+dockerautovers+"\n"
+logo="\n██████   ██████   ██████ ██   ██ ███████ ██████   █████  ██    ██ ████████  ██████  \n"
+logo+="██   ██ ██    ██ ██      ██  ██  ██      ██   ██ ██   ██ ██    ██    ██    ██    ██ \n"
+logo+="██   ██ ██    ██ ██      █████   █████   ██████  ███████ ██    ██    ██    ██    ██ \n"
+logo+="██   ██ ██    ██ ██      ██  ██  ██      ██   ██ ██   ██ ██    ██    ██    ██    ██ \n"
+logo+="██████   ██████   ██████ ██   ██ ███████ ██   ██ ██   ██  ██████     ██     ██████  \n"
+logo+="\t@ticarpi\t\t\t\t\t\tversion "+dockerautovers+"\n"
 
 if __name__ == '__main__':
     print(logo)
     powershellcmd = checkwsl()
+    if powershellcmd:
+        print('WSL detected, using PowerShell on host for compatibility:\n'+powershellcmd+')
     checkdeps()
     parser = argparse.ArgumentParser(epilog="OK, bye", formatter_class=argparse.RawTextHelpFormatter)
     subparsers = parser.add_subparsers(dest='mode',required=True)
