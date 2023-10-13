@@ -1,0 +1,28 @@
+{
+"dockeritems":{
+    "jwt_tool":[
+        "A tool for hacking JWT",
+        "docker run -it --network \"host\" --rm -v \"${PWD}:/tmp\" -v \"${HOME}/.jwt_tool:/root/.jwt_tool\" ticarpi/jwt_tool",
+        "-h",
+        ["DockerHub", "ticarpi/jwt_tool:latest"],
+        "",
+        ""
+        ],
+    "test":[
+        "AKA CrackMapExec: An AD pentesting tool - SMB/LDAP/MSSQL/etc.",
+        "docker run -it --rm --name crackmapexec -v \"${HOME}/.cme:/root/.cme\" -v \"${PWD}:/tmp\" byt3bl33d3r/crackmapexec",
+        "-h; PWD mapped to /tmp",
+        ["DockerHub", "byt3bl33d3r/crackmapexec:latest"],
+        "",
+        ""
+        ],
+    "test2":[
+        "The CrackMapExec database for creds and other ouput from the tool",
+        "docker run -it --rm --name crackmapexec -v \"${HOME}/.cme:/root/.cme\" -v \"${PWD}:/tmp\" --entrypoint=/usr/local/bin/cmedb byt3bl33d3r/crackmapexec",
+        "-h; PWD mapped to /tmp",
+        ["DockerHub", "byt3bl33d3r/crackmapexec:latest"],
+        "",
+        ""
+        ]
+    }
+}

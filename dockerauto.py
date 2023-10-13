@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 0.4 (12_10_2023)
+# DockerAuto version 0.5 (13_10_2023)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "0.4"
+dockerautovers = "0.5"
 import os
 from urllib.request import urlretrieve
 #import subprocess
@@ -118,21 +118,50 @@ def mode_unload(dockeritem):
         for key in dockerlist_json['dockeritems'].keys():
             print("    [*] "+key)
 
+
+def buildscript(repourl):
+    print('[+] Building Dockerfile generation script\n')
+    genscr = ''
+    if 'github.com' in repourl:
+        print('[+] Detected GitHub repo, cloning...\n')
+        split = repourl.rstrip('/').split('/')
+        imgname = ['GitHub', split[-1]]
+    else:
+        imgname = ['Dockerfile', input('\n[*] Please enter the image name with no spaces(e.g. jwt_tool)\n')
+    print('[!] Script generation function not yet ready')
+    # TODO
+    return genscr, imgname
+
+def file2echo(inputfile):
+    #TODO
+    return echooutput
+
+
 def mode_add(dockeritem, dockerfile, configfile):
     print('\n[+] Creating entry for new DockerAuto item: '+dockeritem)
-    newitem = ["","","","","",""]
+    newitem = ["","","",[],"",""]
     newitem[5] = ''
     newitem[0] = input('\n[*] Please enter a short description of the image\n')
     with open(configfile, "r") as dockerlist:
         dockerlist_json = json.load(dockerlist)
     if dockerfile:
-        newitem[3] = 'dockerauto/'+input('\n[*] Please enter the image name with no spaces(e.g. jwt_tool)\n')
-        print('Dockerfile? Fancy!')
-        URL = input('\n[*] Please enter the full URL of the source code zip file, or a GitHub repo for cloning\n')
-        newitem[4] = 'GENERATION SCRIPT'
+        option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] No codebase to import.\n')
+        if option == '1':
+            repourl = 'https://www.github.com/'+input('\n[*] Please enter the "user/name" of the GitHub repo for cloning (e.g. ticarpi/jwt_tool)\n')
+        elif option == '2':
+            zipurl = input('\n    [*] Please enter the URL of the zipfile you wish to download\n')
+            zipdir = input('\n    [*] Please enter a directory name that the files are within in the zip file (or leave blank if no zip subdirectory)\n')
+        elif option == '3':
+            zipurl = input('\n    [*] Please enter the URL of the zipfile you wish to download\n')
+        else:
+            print('Not a valid option. Quitting...')
+            exit(1)
+        genscr, imgname = buildscript(repourl)
+        newitem[3] = imgname
+        newitem[4] = genscr
     else:
         newitem[4] = ''
-        newitem[3] = input('\n[*] Please enter the Dockerhub repo (e.g. ticarpi/jwt_tool)\n')
+        newitem[3] = ['DockerHub', input('\n[*] Please enter the DockerHub repo (e.g. ticarpi/jwt_tool)\n')]
     newitem[1] = input('\n[*] Please enter the base command used to run this container. e.g. docker run -it --network \"host\" --rm -v \"${PWD}:/tmp\" -v \"${HOME}/.jwt_tool:/root/.jwt_tool\" ticarpi/jwt_tool\n    Include the following:\n    [*] volume mapping "-v"\n    [*] port mapping "-p"\n    [*] environment variables "-e"\n    [*] Remove instruction "--rm"\n    [*] and make sure the image referenced is: '+newitem[3]+'\n')
     newitem[2] = input('\n[*] Please enter any useful notes for running the container, separating each note with a semicolon. e.g. "-h; PWD mapped to /tmp"\n')
     dockerlist_json['dockeritems'][dockeritem] = newitem
@@ -149,7 +178,7 @@ def mode_info(dockeritem):
             print("    [*] Description: "+dockerlist_json['dockeritems'][dockeritem][0])
             print("    [*] Usage Notes:\n        [*] "+dockerlist_json['dockeritems'][dockeritem][2].replace(';','\n        [*] '))
             print("    [*] Command: "+dockerlist_json['dockeritems'][dockeritem][1])
-            print("    [*] Image Name: "+dockerlist_json['dockeritems'][dockeritem][3])
+            print("    [*] Image Name: "+str(dockerlist_json['dockeritems'][dockeritem][3]))
             print("    [*] Dockerfile Generation Script: "+dockerlist_json['dockeritems'][dockeritem][4])
         except:
             print("ERROR processing the specified tool ("+dockeritem+").")
