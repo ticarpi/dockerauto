@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 0.6 (13_10_2023)
+# DockerAuto version 0.7 (20_10_2023)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "0.6"
+dockerautovers = "0.7"
 import os
 from urllib.request import urlretrieve
 import json
@@ -15,11 +15,12 @@ import base64
 import argparse
 from datetime import datetime
 import shutil
+from zipfile import ZipFile 
 
 #
 #TODO:
-#update from zipfile
-#
+#add categories?
+#add docker-compose
 #
 
 configfile = os.path.expanduser('~/dockerlist.json')
@@ -39,33 +40,36 @@ def run_update(dockerlist_json, updateitem):
             print('[-] The specified tool ('+updateitem+') could not be updated')
 
 def run_build(dockerlist_json, dockeritem):
-    #TODO
     try:
         print('[+] Prepping temp build directory')
         shutil.rmtree('tmp_da/')
     except:
         print('[+] Creating temp build directory')
     if dockerlist_json['dockeritems'][dockeritem][3][0] == 'GitHub':
-        split = dockerlist_json['dockeritems'][dockeritem][3][1].split("/")
+        split = dockerlist_json['dockeritems'][dockeritem][3][2].split("/")
         gitdir = split[-1]
         builddir = 'tmp_da/'+gitdir
         pwd = os.getcwd()
         os.mkdir('tmp_da/')
         os.chdir('tmp_da/')
-        os.system('git clone '+dockerlist_json['dockeritems'][dockeritem][3][1])
+        os.system('git clone '+dockerlist_json['dockeritems'][dockeritem][3][2])
         os.chdir(pwd)
     elif dockerlist_json['dockeritems'][dockeritem][3][0] == 'ZipUrl':
-        os.mkdir(builddir)
-        pwd = os.getcwd()
-        os.chdir(builddir)
-    else:
         try:
             builddir = 'tmp_da/'+dockerlist_json['dockeritems'][dockeritem][3][3]
         except:
             builddir = 'tmp_da/'
+        os.mkdir('tmp_da/')
+        pwd = os.getcwd()
+        print('[+] Downloading '+dockerlist_json['dockeritems'][dockeritem][3][2])
+        downloadfile(dockerlist_json['dockeritems'][dockeritem][3][2], 'tmp_da/temp.zip')
+        with ZipFile('tmp_da/temp.zip', 'r') as zObject:
+            print('[+] Extracting tmp_da/temp.zip to '+'tmp_da/')
+            zObject.extractall(path='tmp_da/')
+    else:
+        builddir = 'tmp_da/'
         os.mkdir(builddir)
         pwd = os.getcwd()
-        os.chdir(builddir)
     for file in dockerlist_json['dockeritems'][dockeritem][4].keys():
         filename = builddir.rstrip("/")+'/'+file
         print('    [*] Building: '+filename)
@@ -150,9 +154,9 @@ def mode_run(dockeritem, args):
 def unload_image(dockeritem, dockerlist_json):
     try:
         if powershellcmd:
-            cmd = powershellcmd+' -c \'docker image rm '+dockerlist_json['dockeritems'][dockeritem][3][1]+'\''
+            cmd = powershellcmd+' -c \'docker image rm '+dockerlist_json['dockeritems'][dockeritem][3][2]+'\''
         else:
-            cmd = 'docker image rm '+dockerlist_json['dockeritems'][dockeritem][3][1]
+            cmd = 'docker image rm '+dockerlist_json['dockeritems'][dockeritem][3][2]
         os.system(cmd)
     except:
         print("[!] ERROR processing the specified tool ("+dockeritem+").")
@@ -185,6 +189,7 @@ def file2b64(inputfile, filename):
     return b64obj
 
 def mode_add(dockeritem, dockerfile, file, configfile):
+    dockeritem.replace(' ', '_')
     with open(configfile, "r") as dockerlist:
         dockerlist_json = json.load(dockerlist)
     if dockeritem in dockerlist_json['dockeritems']:
@@ -204,10 +209,10 @@ def mode_add(dockeritem, dockerfile, file, configfile):
                 newitem[4].update(file2b64(filename, filename_split))
         newitem[4].update(file2b64(dockerfile, 'Dockerfile'))
         print('[+] Adding: '+dockerfile+' as the Dockerfile for building the '+dockeritem+' base image')
-        option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] No codebase to import.\n')
+        option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] No codebase to import\n')
         if option == '1':
             repourl = 'https://www.github.com/'+input('\n[*] Please enter the "user/name" of the GitHub repo for cloning (e.g. ticarpi/jwt_tool)\n')
-            newitem[3] = ['GitHub', repourl]
+            newitem[3] = ['GitHub', dockeritem, repourl]
         elif option == '2':
             zipurl = input('\n    [*] Please enter the URL of the zipfile you wish to download\n')
             zipdir = input('\n    [*] Please enter a directory name that the files are within in the zip file (or leave blank if no zip subdirectory)\n')
@@ -218,7 +223,19 @@ def mode_add(dockeritem, dockerfile, file, configfile):
             print('[-] Not a valid option. Quitting...')
             exit(1)
     else:
-        newitem[3] = ['DockerHub', input('\n[*] Please enter the DockerHub repo (e.g. ticarpi/jwt_tool)\n')]
+        option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] Pull from DockerHub\n')
+        if option == '1':
+            repourl = 'https://www.github.com/'+input('\n[*] Please enter the "user/name" of the GitHub repo for cloning (e.g. ticarpi/jwt_tool)\n')
+            newitem[3] = ['GitHub', dockeritem, repourl]
+        elif option == '2':
+            zipurl = input('\n    [*] Please enter the URL of the zipfile you wish to download\n')
+            zipdir = input('\n    [*] Please enter a directory name that the files are within in the zip file (or leave blank if no zip subdirectory)\n')
+            newitem[3] = ['ZipUrl', dockeritem, zipurl, zipdir]
+        elif option == '3':
+            newitem[3] = ['DockerHub', input('\n[*] Please enter the DockerHub repo (e.g. ticarpi/jwt_tool)\n')]
+        else:
+            print('[-] Not a valid option. Quitting...')
+            exit(1)
     newitem[1] = input('\n[*] Please enter the base command used to run this container.\ne.g. docker run -it --network \"host\" --rm -v \"${PWD}:/tmp\" -v \"${HOME}/.jwt_tool:/root/.jwt_tool\" ticarpi/jwt_tool\n    Include the following:\n    [*] volume mapping "-v"\n    [*] port mapping "-p"\n    [*] environment variables "-e"\n    [*] Remove instruction "--rm"\n    [*] and make sure the image referenced is: '+newitem[3][1]+'\n')
     newitem[2] = input('\n[*] Please enter any useful notes for running the container, separating each note with a semicolon. e.g. "-h; PWD mapped to /tmp"\n')
     dockerlist_json['dockeritems'][dockeritem] = newitem
@@ -282,7 +299,8 @@ def checkimage():
     imagelist = []
     for image in images:
         img = json.loads(image)
-        imagelist.append(img['Repository']+':'+img['Tag'])
+        #imagelist.append(img['Repository']+':'+img['Tag'])
+        imagelist.append(img['Repository'])
     return imagelist
 
 def mode_export():
@@ -341,7 +359,7 @@ logo+="██   ██ ██    ██ ██      █████ 
 logo+="██   ██ ██    ██ ██      ██  ██  ██      ██   ██ ██   ██ ██    ██    ██    ██    ██ \n"
 logo+="██████   ██████   ██████ ██   ██ ███████ ██   ██ ██   ██  ██████     ██     ██████  \n"
 logo+="\t@ticarpi\t\t\t\t\t\tversion "+dockerautovers+"\n"
-
+    
 if __name__ == '__main__':
     print(logo)
     powershellcmd = checkwsl()
