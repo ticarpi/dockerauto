@@ -6,7 +6,8 @@
         "-h",
         ["DockerHub", "ticarpi/jwt_tool"],
         {},
-        ""
+        "",
+		"tool"
         ],
     "cme":[
         "AKA CrackMapExec: An AD pentesting tool - SMB/LDAP/MSSQL/etc.",
@@ -14,7 +15,8 @@
         "-h; PWD mapped to /tmp",
         ["DockerHub", "byt3bl33d3r/crackmapexec"],
         {},
-        ""
+        "",
+		"tool"
         ],
     "cmedb":[
         "The CrackMapExec database for creds and other ouput from the tool",
@@ -22,7 +24,8 @@
         "-h; PWD mapped to /tmp",
         ["None", "byt3bl33d3r/crackmapexec"],
         {},
-        ""
+        "",
+		"tool"
         ]
     }
 }

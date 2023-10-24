@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 0.7 (20_10_2023)
+# DockerAuto version 0.9 (24_10_2023)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "0.7"
+dockerautovers = "0.9"
 import os
 from urllib.request import urlretrieve
 import json
@@ -17,13 +17,10 @@ from datetime import datetime
 import shutil
 from zipfile import ZipFile 
 
-#
-#TODO:
-#add categories?
-#add docker-compose
-#
 
-configfile = os.path.expanduser('~/dockerlist.json')
+basepath = os.path.expanduser('~/.dockerauto/')
+configfile = basepath+'dockerlist.json'
+tmpdir = basepath+'tmp_da/'
 
 def run_update(dockerlist_json, updateitem):
     if dockerlist_json['dockeritems'][updateitem][3][0] != 'DockerHub':
@@ -31,10 +28,7 @@ def run_update(dockerlist_json, updateitem):
     else:
         try:
             print("\n[+] Running docker update command for "+updateitem)
-            if powershellcmd:
-                cmd = powershellcmd+' -c \'docker pull '+dockerlist_json['dockeritems'][updateitem][3][1]+'\''
-            else:
-                cmd = 'docker pull '+dockerlist_json['dockeritems'][updateitem][3][1]
+            run_cmd('docker pull '+dockerlist_json['dockeritems'][updateitem][3][1])
             os.system(cmd)
         except:
             print('[-] The specified tool ('+updateitem+') could not be updated')
@@ -42,44 +36,40 @@ def run_update(dockerlist_json, updateitem):
 def run_build(dockerlist_json, dockeritem):
     try:
         print('[+] Prepping temp build directory')
-        shutil.rmtree('tmp_da/')
+        shutil.rmtree(tmpdir)
     except:
         print('[+] Creating temp build directory')
     if dockerlist_json['dockeritems'][dockeritem][3][0] == 'GitHub':
         split = dockerlist_json['dockeritems'][dockeritem][3][2].split("/")
         gitdir = split[-1]
-        builddir = 'tmp_da/'+gitdir
+        builddir = tmpdir+gitdir
         pwd = os.getcwd()
-        os.mkdir('tmp_da/')
-        os.chdir('tmp_da/')
+        os.mkdir(tmpdir)
+        os.chdir(tmpdir)
         os.system('git clone '+dockerlist_json['dockeritems'][dockeritem][3][2])
         os.chdir(pwd)
     elif dockerlist_json['dockeritems'][dockeritem][3][0] == 'ZipUrl':
         try:
-            builddir = 'tmp_da/'+dockerlist_json['dockeritems'][dockeritem][3][3]
+            builddir = tmpdir+dockerlist_json['dockeritems'][dockeritem][3][3]
         except:
-            builddir = 'tmp_da/'
-        os.mkdir('tmp_da/')
+            builddir = tmpdir
+        os.mkdir(tmpdir)
         pwd = os.getcwd()
         print('[+] Downloading '+dockerlist_json['dockeritems'][dockeritem][3][2])
-        downloadfile(dockerlist_json['dockeritems'][dockeritem][3][2], 'tmp_da/temp.zip')
-        with ZipFile('tmp_da/temp.zip', 'r') as zObject:
-            print('[+] Extracting tmp_da/temp.zip to '+'tmp_da/')
-            zObject.extractall(path='tmp_da/')
+        downloadfile(dockerlist_json['dockeritems'][dockeritem][3][2], tmpdir+'temp.zip')
+        with ZipFile(tmpdir+'temp.zip', 'r') as zObject:
+            print('[+] Extracting '+tmpdir+'temp.zip to '+tmpdir)
+            zObject.extractall(path=tmpdir)
     else:
-        builddir = 'tmp_da/'
+        builddir = tmpdir
         os.mkdir(builddir)
         pwd = os.getcwd()
     for file in dockerlist_json['dockeritems'][dockeritem][4].keys():
         filename = builddir.rstrip("/")+'/'+file
         print('    [*] Building: '+filename)
         b642file(dockerlist_json['dockeritems'][dockeritem][4][file], filename)
-    if powershellcmd:
-        cmd = powershellcmd+' -c \'docker build -t '+dockeritem+' .\''
-    else:
-        cmd = 'docker build -t '+dockeritem+' .'
     os.chdir(builddir)
-    os.system(cmd)
+    run_cmd('docker build -t '+dockeritem+' .')
     os.chdir(pwd)
     shutil.rmtree(builddir)
     print('[+] Cleaning up temp build directory')
@@ -100,7 +90,7 @@ def mode_update(dockeritem):
         if update=='y' or update=='Y':
             for key in dockerlist_json['dockeritems'].keys():
                 run_update(dockerlist_json, key)
-                dockerlist_json['dockeritems'][key][6] = timestamp = int(datetime.timestamp(datetime.now()))
+                dockerlist_json['dockeritems'][key][5] = timestamp = int(datetime.timestamp(datetime.now()))
             with open(configfile, "w") as dockerdump:
                 dockerdump.write(json.dumps(dockerlist_json))
         else:
@@ -141,11 +131,20 @@ def mode_run(dockeritem, args):
         dockerlist_json = json.load(dockerlist)
     try:
         print("[+] Running docker command for "+dockeritem)
-        if powershellcmd:
-            cmd = powershellcmd+' -c \''+dockerlist_json['dockeritems'][dockeritem][1]+' '+args+'\''
+        if ' --rm ' in dockerlist_json['dockeritems'][dockeritem][1]:
+            run_cmd(dockerlist_json['dockeritems'][dockeritem][1]+' '+args)
         else:
-            cmd = dockerlist_json['dockeritems'][dockeritem][1]+' '+args
-        os.system(cmd)
+            cmd = 'docker ps -a --format json'
+            if powershellcmd:
+                cmd = powershellcmd+' -c \''+cmd+'\''
+            loaded = os.popen(cmd).readlines()         
+            loadlist = []
+            for container in loaded:
+                img = json.loads(container)
+                loadlist.append(img['Names'])
+            if dockeritem in loadlist:
+                print('[*] Detected an existing named DockerAuto container - restarting...')
+                run_cmd('docker start '+dockeritem+' -i')
     except:
         print("The specified tool ("+dockeritem+") could not be run. Try one of the following:")
         for key in dockerlist_json['dockeritems'].keys():
@@ -153,13 +152,22 @@ def mode_run(dockeritem, args):
 
 def unload_image(dockeritem, dockerlist_json):
     try:
-        if powershellcmd:
-            cmd = powershellcmd+' -c \'docker image rm '+dockerlist_json['dockeritems'][dockeritem][3][2]+'\''
-        else:
-            cmd = 'docker image rm '+dockerlist_json['dockeritems'][dockeritem][3][2]
-        os.system(cmd)
+        run_cmd('docker image rm '+dockerlist_json['dockeritems'][dockeritem][3][1])
     except:
         print("[!] ERROR processing the specified tool ("+dockeritem+").")
+
+def run_cmd(cmd):
+    if powershellcmd:
+        cmd = powershellcmd+' -c \''+cmd+'\''
+    #print('[*] Running: '+cmd+'\n')
+    os.system(cmd)
+
+def mode_shell(dockeritem):
+    with open(configfile, "r") as dockerlist:
+        dockerlist_json = json.load(dockerlist)
+    if dockeritem in dockerlist_json['dockeritems']:
+        print('[+] Creating a /bin/sh shell on the DockerAuto image ('+dockerlist_json['dockeritems'][dockeritem][3][1]+')\n    [*] Type exit to close the shell\n    [*] If the image has /bin/bash you can run that to upgrade your shell\n')
+        run_cmd('docker run -it --rm --name shell_'+dockeritem+' --entrypoint=/bin/sh '+dockerlist_json['dockeritems'][dockeritem][3][1])
 
 def mode_unload(dockeritem):
     with open(configfile, "r") as dockerlist:
@@ -188,7 +196,7 @@ def file2b64(inputfile, filename):
         b64obj[filename] = base64.b64encode(thisfile.read().encode('ascii')).decode('ascii')
     return b64obj
 
-def mode_add(dockeritem, dockerfile, file, configfile):
+def mode_add(dockeritem, dockerfile, file, configfile, dockercomposefile):
     dockeritem.replace(' ', '_')
     with open(configfile, "r") as dockerlist:
         dockerlist_json = json.load(dockerlist)
@@ -196,19 +204,33 @@ def mode_add(dockeritem, dockerfile, file, configfile):
         print('[-] An entry already exists for '+dockeritem)
         exit(1)
     print('\n[+] Creating entry for new DockerAuto item: '+dockeritem)
-    newitem = ["","","",[],"",""]
+    newitem = ["","","",[],"","",""]
     newitem[5] = ''
     newitem[0] = input('\n[*] Please enter a short description of the image\n')
     newitem[4] = {}
-    if dockerfile:
+    if dockerfile or dockercomposefile:
         if file:
             for filename in file:
                 split = filename.split("/")
                 filename_split = split[-1]
                 print('[+] Adding: '+filename+' contents to build info')
                 newitem[4].update(file2b64(filename, filename_split))
-        newitem[4].update(file2b64(dockerfile, 'Dockerfile'))
-        print('[+] Adding: '+dockerfile+' as the Dockerfile for building the '+dockeritem+' base image')
+        if dockerfile:
+            newitem[4].update(file2b64(dockerfile, 'Dockerfile'))
+            print('[+] Adding: '+dockerfile+' as the Dockerfile for building the '+dockeritem+' base image')
+        else:
+            newitem[4].update(file2b64(dockercomposefile, 'docker-compose.yaml'))
+            print('[+] Adding: '+dockercomposefile+' as the docker-compose.yaml file for building the '+dockeritem+' multi container image')
+        option = input('[*] Select which category best fits your new DockerAuto item:\n    [1] Tool (for running a single application)\n    [2] Service (For serving or receiving files, or hosting data etc.)\n    [3] Environment (For exploring filesystems and running a variety of tooling from a base image)\n')
+        if option == '1':
+            newitem[6] = "tool"
+        elif option == '2':
+            newitem[6] = "service"
+        elif option == '3':
+            newitem[6] = "environment"
+        else:
+            print('[-] Not a valid option. Quitting...')
+            exit(1)
         option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] No codebase to import\n')
         if option == '1':
             repourl = 'https://www.github.com/'+input('\n[*] Please enter the "user/name" of the GitHub repo for cloning (e.g. ticarpi/jwt_tool)\n')
@@ -218,11 +240,14 @@ def mode_add(dockeritem, dockerfile, file, configfile):
             zipdir = input('\n    [*] Please enter a directory name that the files are within in the zip file (or leave blank if no zip subdirectory)\n')
             newitem[3] = ['ZipUrl', dockeritem, zipurl, zipdir]
         elif option == '3':
-            newitem[3] = ['Dockerfile', dockeritem]
+            if dockerfile:
+                newitem[3] = ['Dockerfile', dockeritem]
+            else:
+                newitem[3] = ['Docker-Compose', dockeritem]
         else:
             print('[-] Not a valid option. Quitting...')
             exit(1)
-    else:
+    else:####
         option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] Pull from DockerHub\n')
         if option == '1':
             repourl = 'https://www.github.com/'+input('\n[*] Please enter the "user/name" of the GitHub repo for cloning (e.g. ticarpi/jwt_tool)\n')
@@ -236,7 +261,7 @@ def mode_add(dockeritem, dockerfile, file, configfile):
         else:
             print('[-] Not a valid option. Quitting...')
             exit(1)
-    newitem[1] = input('\n[*] Please enter the base command used to run this container.\ne.g. docker run -it --network \"host\" --rm -v \"${PWD}:/tmp\" -v \"${HOME}/.jwt_tool:/root/.jwt_tool\" ticarpi/jwt_tool\n    Include the following:\n    [*] volume mapping "-v"\n    [*] port mapping "-p"\n    [*] environment variables "-e"\n    [*] Remove instruction "--rm"\n    [*] and make sure the image referenced is: '+newitem[3][1]+'\n')
+    newitem[1] = input('\n[*] Please enter the base command used to run this container.\ne.g. docker run -it --network \"host\" --rm -v \"${PWD}:/tmp\" -v \"${HOME}/.jwt_tool:/root/.jwt_tool\" ticarpi/jwt_tool\n    Include the following:\n    [*] volume mapping "-v"\n    [*] port mapping "-p"\n    [*] environment variables "-e"\n    [*] Remove instruction "--rm"\n    [*] only use "double quotes", not \'single quotes\'\n    [*] and make sure the image referenced is: '+newitem[3][1]+'\n')
     newitem[2] = input('\n[*] Please enter any useful notes for running the container, separating each note with a semicolon. e.g. "-h; PWD mapped to /tmp"\n')
     dockerlist_json['dockeritems'][dockeritem] = newitem
     with open(configfile, "w") as dockerdump:
@@ -263,6 +288,7 @@ def mode_info(dockeritem):
         print("    [*] Dockerfile Generation Script Files:")
         for file in genfiles:
             print("        [*] "+file)
+        print("    [*] Category: "+dockerlist_json['dockeritems'][dockeritem][6].capitalize())
     else:
         print("The specified tool ("+dockeritem+") is not in the config file. Try one of the following:")
         for key in dockerlist_json['dockeritems'].keys():
@@ -273,12 +299,15 @@ def mode_list():
         dockerlist_json = json.load(dockerlist)
         imagelist = checkimage()
         print('[+] Images in config:')
-        for key in dockerlist_json['dockeritems'].keys():
-            installed = ' - run \'update\' to build image'
-            imgname = dockerlist_json['dockeritems'][key][3][1]
-            if imgname in imagelist:
-                installed = ' - IMAGE INSTALLED ('+imgname+')'
-            print("    [*] "+key+installed)
+        for cat in ['tool', 'service', 'environment']:
+            print('    [*] '+cat.capitalize()+'s')
+            for key in dockerlist_json['dockeritems'].keys():
+                if dockerlist_json['dockeritems'][key][6] == cat:
+                    installed = ' - run \'update\' to build image'
+                    imgname = dockerlist_json['dockeritems'][key][3][1]
+                    if imgname in imagelist:
+                        installed = ' - IMAGE INSTALLED ('+imgname+')'
+                    print("        [*] "+key+installed)
 
 def saveconfig(sourcefile, destfile):
     print('\n[+] Saving config\nfrom: '+sourcefile+'\nto: '+destfile+'\n')
@@ -291,15 +320,13 @@ def downloadfile(URL, filename):
     urlretrieve(URL, filename)
 
 def checkimage():
+    cmd = 'docker images --format json'
     if powershellcmd:
-        cmd = powershellcmd+' -c \'docker images --format json\''
-    else:
-        cmd = 'docker images --format json'
+        cmd = powershellcmd+' -c \''+cmd+'\''
     images = os.popen(cmd).readlines()
     imagelist = []
     for image in images:
         img = json.loads(image)
-        #imagelist.append(img['Repository']+':'+img['Tag'])
         imagelist.append(img['Repository'])
     return imagelist
 
@@ -307,25 +334,32 @@ def mode_export():
     saveconfig(configfile, os.getcwd()+'/EXPORT.dockerlist.json')
 
 def mode_install(config):
-    if shutil.which('dockerauto') is None:
-        os.system('sudo ln -s '+os.getcwd()+'/dockerauto.py /usr/bin/dockerauto')
-        print('[+] DockerAuto now installed via simlink to /usr/bin/dockerauto, you can now run with:\n$ dockerauto [args]')
-    if config.startswith('http://') or config.startswith('https://'):
-        downloadfile(config, 'temp.json')
-        config = 'temp.json'
-    if not os.path.exists(config):
-        print('[!] Cannot find '+config+' check the filepath')
-        exit(1)
-    if os.path.exists(configfile):
-        overwrite = input('[!] DockerAuto config at '+configfile+' already exists.\nDo you want to overwrite this? (y/N)')
+    if os.path.exists(basepath):
+        overwrite = input('[!] Installing a new DockerAuto config will remove previous configs and some cached docker data.\nDo you want to continue? (y/N)')
+        
         if overwrite=='y' or overwrite=='Y':
             jsonfile=os.getcwd()+'/'+config
             saveconfig(jsonfile, configfile)
         else:
             print('Quitting...')
             exit(1)
-    else:
-        saveconfig(config)
+    if shutil.which('dockerauto') is None:
+        os.system('sudo ln -s '+os.getcwd()+'/dockerauto.py /usr/bin/dockerauto')
+        print('[+] DockerAuto now installed via simlink to /usr/bin/dockerauto, you can now run with:\n$ dockerauto [args]')
+    try:
+        print('[+] Prepping base directory at: '+basepath)
+        shutil.rmtree(basepath)
+    except:
+        print('[+] Building base directory at: '+basepath)
+    os.mkdir(basepath)
+    if config.startswith('http://') or config.startswith('https://'):
+        downloadfile(config, 'temp.json')
+        config = 'temp.json'
+    if not os.path.exists(config):
+        print('[!] Cannot find '+config+' check the filepath')
+        exit(1)
+    #jsonfile=os.getcwd()+'/'+config
+    saveconfig(config, configfile)
         
 def checkwsl():
     powershellcmd = ''
@@ -370,13 +404,16 @@ if __name__ == '__main__':
     parser_run = subparsers.add_parser('run', help="Run Docker commands for DockerAuto items")
     parser_list = subparsers.add_parser('list', help="Show all DockerAuto items in the config (and install status)")
     parser_info = subparsers.add_parser('info', help="Look up info about each DockerAuto item in the config")
+    parser_shell = subparsers.add_parser('shell', help="Drop into the specified DockerAuto image in a shell")
     parser_add = subparsers.add_parser('add', help="Add new DockerAuto items to the config manually")
     parser_remove = subparsers.add_parser('remove', help="Remove DockerAuto items from the config manually")
     parser_update = subparsers.add_parser('update', help="Pull any new Docker image updates for DockerAuto items in the config - or for everything (update ALL)")
     parser_unload = subparsers.add_parser('unload', help="Delete stored Docker images for DockerAuto items in the config - or for everything (unload ALL)")
     parser_export = subparsers.add_parser('export', help="Export the config file")
     parser_add.add_argument('dockeritem', type=str, action="store", help="A new DockerAuto item", default='dockerauto')
+    parser_shell.add_argument('dockeritem', type=str, action="store", help="The DockerAuto image to connect to", default='dockerauto')
     parser_add.add_argument('-d', '--dockerfile', action="store", help="Dockerfile for the new DockerAuto item")
+    parser_add.add_argument('-dc', '--dockercomposefile', action="store", help="docker-compose YAML file for running a collection of services")
     parser_add.add_argument('-f', '--file', action="append", help="Additional files, such as configs/certs, for the new DockerAuto item")
     parser_run.add_argument('dockeritem', type=str, action="store", help="Run the selected DockerAuto items", default='dockerauto')
     parser_update.add_argument('dockeritem', type=str, action="store", help="Update the selected DockerAuto items (or 'update ALL' to update all Docker images)", default='ALL')
@@ -397,6 +434,8 @@ if __name__ == '__main__':
         mode_update(args.dockeritem)
     elif args.mode == 'unload':
         mode_unload(args.dockeritem)
+    elif args.mode == 'shell':
+        mode_shell(args.dockeritem)
     elif args.mode == 'remove':
         mode_remove(args.dockeritem)
     elif args.mode == 'list':
@@ -406,4 +445,7 @@ if __name__ == '__main__':
     elif args.mode == 'run':
         mode_run(args.dockeritem, args.args)
     elif args.mode == 'add':
-        mode_add(args.dockeritem, args.dockerfile, args.file, configfile)
+        if args.dockerfile and args.dockercomposefile:
+            print('[-] Cannot specify BOTH Dockerfile and docker-compose YAML.\n    [*] If your Docker-Compose instance uses Dockerfiles, add these as files (\'-f\')')
+            exit(1)
+        mode_add(args.dockeritem, args.dockerfile, args.file, configfile, args.dockercomposefile)
