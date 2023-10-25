@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 0.9 (24_10_2023)
+# DockerAuto version 0.10 (26_10_2023)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "0.9"
+dockerautovers = "0.10"
 import os
 from urllib.request import urlretrieve
 import json
@@ -130,21 +130,25 @@ def mode_run(dockeritem, args):
     with open(configfile, "r") as dockerlist:
         dockerlist_json = json.load(dockerlist)
     try:
-        print("[+] Running docker command for "+dockeritem)
-        if ' --rm ' in dockerlist_json['dockeritems'][dockeritem][1]:
-            run_cmd(dockerlist_json['dockeritems'][dockeritem][1]+' '+args)
+        imagelist = checkimage()
+        if dockeritem in imagelist or dockerlist_json['dockeritems'][dockeritem][3][0] == 'DockerHub':
+            print("[+] Running docker command for "+dockeritem)
+            if ' --rm ' in dockerlist_json['dockeritems'][dockeritem][1]:
+                run_cmd(dockerlist_json['dockeritems'][dockeritem][1]+' '+args)
+            else:
+                cmd = 'docker ps -a --format json'
+                if powershellcmd:
+                    cmd = powershellcmd+' -c \''+cmd+'\''
+                loaded = os.popen(cmd).readlines()         
+                loadlist = []
+                for container in loaded:
+                    img = json.loads(container)
+                    loadlist.append(img['Names'])
+                if dockeritem in loadlist:
+                    print('[*] Detected an existing named DockerAuto container - restarting...')
+                    run_cmd('docker start '+dockeritem+' -i')
         else:
-            cmd = 'docker ps -a --format json'
-            if powershellcmd:
-                cmd = powershellcmd+' -c \''+cmd+'\''
-            loaded = os.popen(cmd).readlines()         
-            loadlist = []
-            for container in loaded:
-                img = json.loads(container)
-                loadlist.append(img['Names'])
-            if dockeritem in loadlist:
-                print('[*] Detected an existing named DockerAuto container - restarting...')
-                run_cmd('docker start '+dockeritem+' -i')
+            print('[-] The image has not yet been created. Run `dockerauto update '+dockeritem+'` to create the docker image')
     except:
         print("The specified tool ("+dockeritem+") could not be run. Try one of the following:")
         for key in dockerlist_json['dockeritems'].keys():
@@ -247,7 +251,17 @@ def mode_add(dockeritem, dockerfile, file, configfile, dockercomposefile):
         else:
             print('[-] Not a valid option. Quitting...')
             exit(1)
-    else:####
+    else:
+        option = input('[*] Select which category best fits your new DockerAuto item:\n    [1] Tool (for running a single application)\n    [2] Service (For serving or receiving files, or hosting data etc.)\n    [3] Environment (For exploring filesystems and running a variety of tooling from a base image)\n')
+        if option == '1':
+            newitem[6] = "tool"
+        elif option == '2':
+            newitem[6] = "service"
+        elif option == '3':
+            newitem[6] = "environment"
+        else:
+            print('[-] Not a valid option. Quitting...')
+            exit(1)
         option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] Pull from DockerHub\n')
         if option == '1':
             repourl = 'https://www.github.com/'+input('\n[*] Please enter the "user/name" of the GitHub repo for cloning (e.g. ticarpi/jwt_tool)\n')
