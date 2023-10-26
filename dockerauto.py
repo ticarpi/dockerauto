@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 0.10 (26_10_2023)
+# DockerAuto version 1.0 (26_10_2023)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "0.10"
+dockerautovers = "1.0"
 import os
 from urllib.request import urlretrieve
 import json
@@ -433,7 +433,7 @@ if __name__ == '__main__':
     parser_update.add_argument('dockeritem', type=str, action="store", help="Update the selected DockerAuto items (or 'update ALL' to update all Docker images)", default='ALL')
     parser_unload.add_argument('dockeritem', type=str, action="store", help="Unload the selected DockerAuto item to the config", default='ALL')
     parser_remove.add_argument('dockeritem', type=str, action="store", help="Remove the selected DockerAuto item from the config", default='ALL')
-    parser_run.add_argument("-a", "--args", action="store", help="Arguments to use in the docker command (surround in 'single quotes' e.g. -a='--help')", required=False, default='')
+    parser_run.add_argument('arglist', help="Arguments to use in the docker command (surround in 'single quotes' e.g. '-u https://example.com -X GET')", nargs='*')
     parser_info.add_argument('dockeritem', type=str, action="store", help="Info about selected DockerAuto items", default='dockerauto')
     parser_install.add_argument("-c", "--config", action="store", help="URL or local filepath to grab your custom DockerAuto config from", required=False, default='example.dockerlist.json')
     args = parser.parse_args()
@@ -457,7 +457,10 @@ if __name__ == '__main__':
     elif args.mode == 'export':
         mode_export()
     elif args.mode == 'run':
-        mode_run(args.dockeritem, args.args)
+        arglist = ''
+        if args.arglist:
+            arglist = args.arglist[0] 
+        mode_run(args.dockeritem, arglist)
     elif args.mode == 'add':
         if args.dockerfile and args.dockercomposefile:
             print('[-] Cannot specify BOTH Dockerfile and docker-compose YAML.\n    [*] If your Docker-Compose instance uses Dockerfiles, add these as files (\'-f\')')

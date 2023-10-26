@@ -9,23 +9,14 @@
         "",
 		"tool"
         ],
-    "cme":[
-        "AKA CrackMapExec: An AD pentesting tool - SMB/LDAP/MSSQL/etc.",
-        "docker run -it --rm --name crackmapexec -v \"${HOME}/.cme:/root/.cme\" -v \"${PWD}:/tmp\" byt3bl33d3r/crackmapexec",
-        "-h; PWD mapped to /tmp",
-        ["DockerHub", "byt3bl33d3r/crackmapexec"],
-        {},
-        "",
+    "nmap": [
+		"Network port scanner",
+		"docker run -it --rm --name nmap secsi/nmap",
+		"-h",
+		["DockerHub", "secsi/nmap"],
+		{},
+		"",
 		"tool"
-        ],
-    "cmedb":[
-        "The CrackMapExec database for creds and other ouput from the tool",
-        "docker run -it --rm --name crackmapexec -v \"${HOME}/.cme:/root/.cme\" -v \"${PWD}:/tmp\" --entrypoint=/usr/local/bin/cmedb byt3bl33d3r/crackmapexec",
-        "-h; PWD mapped to /tmp",
-        ["None", "byt3bl33d3r/crackmapexec"],
-        {},
-        "",
-		"tool"
-        ]
+		]
     }
 }
