@@ -1,4 +1,4 @@
-![image](https://github.com/ticarpi/dockerauto/assets/19988419/b901c900-c7e9-4c9a-9ce5-c86043d95cde)
+![image](https://github.com/ticarpi/dockerauto/assets/19988419/a63c89da-3834-4443-9cdb-ee84539d532b)
 
 *Automation, notes and management for Docker images*
 
