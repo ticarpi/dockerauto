@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 1.0 (26_10_2023)
+# DockerAuto version 1.1 (27_10_2023)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "1.0"
+dockerautovers = "1.1"
 import os
 from urllib.request import urlretrieve
 import json
@@ -359,6 +359,7 @@ def mode_install(config):
             exit(1)
     if shutil.which('dockerauto') is None:
         os.system('sudo ln -s '+os.getcwd()+'/dockerauto.py /usr/bin/dockerauto')
+        os.chmod(os.getcwd()+'/dockerauto.py', 0o775)
         print('[+] DockerAuto now installed via simlink to /usr/bin/dockerauto, you can now run with:\n$ dockerauto [args]')
     try:
         print('[+] Prepping base directory at: '+basepath)
