@@ -19,6 +19,9 @@ It requires the following to be installed:
 On an apt-based system these can be installed be simply running:  
 `sudo apt install python3.10 git docker.io -y`
 
+Also set your user to be able to run `docker` without sudo:
+`sudo usermod -aG docker $USER`
+
 
 ### Windows installation
 For Windows you will need the WSL components to be set up and a working WSL distrobution installed.  
