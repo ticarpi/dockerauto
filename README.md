@@ -47,7 +47,8 @@ python3 ./dockerauto.py install
 ```
 
 As part of the installation ***dockerauto*** will:
-*  add `dockerauto` command to your $PATH, so it can be run from anywhere on your system
+*  add `dockerauto` command to your $PATH, so it can be run from anywhere on your system (requires `sudo`)
+*  `chmod` the binary to make it executable
 *  create a base directory in your $HOME path (`~/.dockerauto/`)
 *  copy a config file to the base directory
 
