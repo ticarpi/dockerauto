@@ -334,7 +334,7 @@ def downloadfile(URL, filename):
     urlretrieve(URL, filename)
 
 def checkimage():
-    cmd = 'docker images --format json'
+    cmd = 'docker images --format "{{json .}}"'
     if powershellcmd:
         cmd = powershellcmd+' -c \''+cmd+'\''
     images = os.popen(cmd).readlines()
