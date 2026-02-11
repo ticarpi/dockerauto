@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 1.1 (27_10_2023)
+# DockerAuto version 1.2 (11_02_2026)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "1.1"
+dockerautovers = "1.2"
 import os
 from urllib.request import urlretrieve
 import json
@@ -29,15 +29,17 @@ def run_update(dockerlist_json, updateitem):
         try:
             print("\n[+] Running docker update command for "+updateitem)
             run_cmd('docker pull '+dockerlist_json['dockeritems'][updateitem][3][1])
-            os.system(cmd)
-        except:
+            #os.system(cmd)
+        except Exception as e:
+            print(f'[!] Error: {e}')
             print('[-] The specified tool ('+updateitem+') could not be updated')
 
 def run_build(dockerlist_json, dockeritem):
     try:
         print('[+] Prepping temp build directory')
         shutil.rmtree(tmpdir)
-    except:
+    except Exception as e:
+        print(f'[!] Error: {e}')
         print('[+] Creating temp build directory')
     if dockerlist_json['dockeritems'][dockeritem][3][0] == 'GitHub':
         split = dockerlist_json['dockeritems'][dockeritem][3][2].split("/")
@@ -51,7 +53,8 @@ def run_build(dockerlist_json, dockeritem):
     elif dockerlist_json['dockeritems'][dockeritem][3][0] == 'ZipUrl':
         try:
             builddir = tmpdir+dockerlist_json['dockeritems'][dockeritem][3][3]
-        except:
+        except Exception as e:
+            print(f'[!] Error: {e}')
             builddir = tmpdir
         os.mkdir(tmpdir)
         pwd = os.getcwd()
@@ -149,7 +152,8 @@ def mode_run(dockeritem, args):
                     run_cmd('docker start '+dockeritem+' -i')
         else:
             print('[-] The image has not yet been created. Run `dockerauto update '+dockeritem+'` to create the docker image')
-    except:
+    except Exception as e:
+        print(f"[DEBUG] Error occurred: {type(e).__name__}: {e}")
         print("The specified tool ("+dockeritem+") could not be run. Try one of the following:")
         for key in dockerlist_json['dockeritems'].keys():
             print("    [*] "+key)
@@ -157,13 +161,13 @@ def mode_run(dockeritem, args):
 def unload_image(dockeritem, dockerlist_json):
     try:
         run_cmd('docker image rm '+dockerlist_json['dockeritems'][dockeritem][3][1])
-    except:
+    except Exception as e:
+        print(f'[!] Error: {e}')
         print("[!] ERROR processing the specified tool ("+dockeritem+").")
 
 def run_cmd(cmd):
     if powershellcmd:
         cmd = powershellcmd+' -c \''+cmd+'\''
-    #print('[*] Running: '+cmd+'\n')
     os.system(cmd)
 
 def mode_shell(dockeritem):
@@ -327,7 +331,8 @@ def saveconfig(sourcefile, destfile):
     print('\n[+] Saving config\nfrom: '+sourcefile+'\nto: '+destfile+'\n')
     try:
         shutil.copy2(sourcefile, destfile)
-    except:
+    except Exception as e:
+        print(f'[!] Error: {e}')
         print('Copy failed, check permissions on source and destination files:\nSource:'+sourcefile+'\nDestination: '+destfile)
 
 def downloadfile(URL, filename):
@@ -340,8 +345,11 @@ def checkimage():
     images = os.popen(cmd).readlines()
     imagelist = []
     for image in images:
-        img = json.loads(image)
-        imagelist.append(img['Repository'])
+        try:
+            img = json.loads(image)
+            imagelist.append(img['Repository'])
+        except json.JSONDecodeError:
+            continue  # Skip invalid lines
     return imagelist
 
 def mode_export():
@@ -364,7 +372,8 @@ def mode_install(config):
     try:
         print('[+] Prepping base directory at: '+basepath)
         shutil.rmtree(basepath)
-    except:
+    except Exception as e:
+        print(f'[!] Error: {e}')
         print('[+] Building base directory at: '+basepath)
     os.mkdir(basepath)
     if config.startswith('http://') or config.startswith('https://'):
@@ -378,13 +387,10 @@ def mode_install(config):
         
 def checkwsl():
     powershellcmd = ''
-    if os.environ.get('WSL_DISTRO_NAME'):
-        print('[+] WSL detected, checking for PowerShell path...')
-        for path in ['/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', '/mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe']:
-                if os.path.exists(path):
-                    powershellcmd = path
-                    break
-    
+    for path in ['/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', '/mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe', 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', 'C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe']:
+        if os.path.exists(path):
+            powershellcmd = path
+            break
     if powershellcmd:
         print('    [*] PowerShell path: '+powershellcmd+'\n')
     else:
