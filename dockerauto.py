@@ -7,7 +7,7 @@
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "1.2"
+dockerautovers = "1.3"
 import os
 from urllib.request import urlretrieve
 import json
