@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 1.3 (11_02_2026)
+# DockerAuto version 2.0 (12_02_2026)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "1.3"
+dockerautovers = "2.0"
 import os
+import socket
+import re
 from urllib.request import urlretrieve
 import json
 import base64
@@ -78,6 +80,81 @@ def run_build(dockerlist_json, dockeritem):
     shutil.rmtree(builddir)
     print('[+] Cleaning up temp build directory')
     return True
+
+def check_port(port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(('', port))
+        sock.close()
+        return True
+    except OSError:
+        return False
+
+def get_alternative_port(original_port):
+    if check_port(original_port):
+        return original_port
+    print(f'[!] Port {original_port} is already in use')
+    while True:
+        new_port = input(f'[?] Enter alternative port (recommended >1024, press Enter for auto): ')
+        if new_port == '':
+            # Auto-select a free port starting from 10000
+            for port in range(10000, 65535):
+                if check_port(port):
+                    print(f'[+] Using auto-selected port: {port}')
+                    return port
+        else:
+            try:
+                new_port = int(new_port)
+                if new_port < 1 or new_port > 65535:
+                    print('[!] Port must be between 1-65535')
+                    continue
+                if new_port < 1024:
+                    print('[!] Warning: ports <1024 may require elevated privileges')
+                if check_port(new_port):
+                    return new_port
+                else:
+                    print(f'[!] Port {new_port} is also in use, try another')
+            except ValueError:
+                print('[!] Please enter a valid port number')
+
+def setuptokens():
+    with open(configfile, "r") as dockerlist:
+        dockerlist_json = json.load(dockerlist)
+    checktokenfile()
+    with open(tokenfile, 'r') as f:
+        tokens = json.load(f)
+    items_with_tokens = []
+    items_needing_tokens = []
+    for dockeritem in dockerlist_json['dockeritems'].keys():
+        cmd = dockerlist_json['dockeritems'][dockeritem][1]
+        if '[TOKEN_HERE]' in cmd:
+            existing_token = tokens['tokenitems'].get(dockeritem, '')
+            if existing_token:
+                items_with_tokens.append(dockeritem)
+            else:
+                items_needing_tokens.append(dockeritem)
+    
+    if not items_needing_tokens and not items_with_tokens:
+        print('[+] No items use [TOKEN_HERE] in their commands')
+        return
+    if items_needing_tokens:
+        print(f'[+] Found {len(items_needing_tokens)} items requiring tokens:')
+        for item in items_needing_tokens:
+            print(f'    [*] {item}')
+        for item in items_needing_tokens:
+            addtoken(item)
+    if items_with_tokens:
+        print(f'\n[+] Found {len(items_with_tokens)} items with existing tokens:')
+        for item in items_with_tokens:
+            current_token = tokens['tokenitems'][item]
+            # Show partial token for security (first 8 chars + ***)
+            display_token = current_token[:8] + '***' if len(current_token) > 8 else current_token
+            print(f'    [*] {item}: {display_token}')
+            replace = input(f'[?] Replace token for {item}? (y/N): ')
+            if replace.lower() == 'y':
+                addtoken(item)
+    print('\n[+] Token setup complete!')
 
 def checktokenfile():
     if not os.path.exists(tokenfile):
@@ -203,6 +280,14 @@ def unload_image(dockeritem, dockerlist_json):
         print("[!] ERROR processing the specified tool ("+dockeritem+").")
 
 def run_cmd(cmd):
+    port_pattern = r'-p\s+(\d+):'
+    matches = re.findall(port_pattern, cmd)
+    for external_port in matches:
+        port_num = int(external_port)
+        new_port = get_alternative_port(port_num)
+        if new_port != port_num:
+            cmd = cmd.replace(f'-p {external_port}:', f'-p {new_port}:')
+            print(f'[+] Updated command to use port {new_port}')
     if '[TOKEN_HERE]' in cmd:
         token = gettoken(imagename)
         if token:
@@ -475,6 +560,7 @@ if __name__ == '__main__':
     parser_update = subparsers.add_parser('update', help="Pull any new Docker image updates for DockerAuto items in the config - or for everything (update ALL)")
     parser_unload = subparsers.add_parser('unload', help="Delete stored Docker images for DockerAuto items in the config - or for everything (unload ALL)")
     parser_export = subparsers.add_parser('export', help="Export the config file")
+    parser_setuptokens = subparsers.add_parser('setuptokens', help="Set up tokens for all items requiring them in config (included as \"[TOKEN_HERE]\")")
     parser_add.add_argument('dockeritem', type=str, action="store", help="A new DockerAuto item", default='dockerauto')
     parser_shell.add_argument('dockeritem', type=str, action="store", help="The DockerAuto image to connect to", default='dockerauto')
     parser_add.add_argument('-d', '--dockerfile', action="store", help="Dockerfile for the new DockerAuto item")
@@ -507,6 +593,8 @@ if __name__ == '__main__':
         mode_list()
     elif args.mode == 'export':
         mode_export()
+    elif args.mode == 'setuptokens':
+        setuptokens()
     elif args.mode == 'run':
         arglist = ''
         if args.arglist:
