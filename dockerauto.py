@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 1.2 (11_02_2026)
+# DockerAuto version 1.3 (11_02_2026)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
@@ -20,6 +20,7 @@ from zipfile import ZipFile
 
 basepath = os.path.expanduser('~/.dockerauto/')
 configfile = basepath+'dockerlist.json'
+tokenfile = basepath+'tokens.json'
 tmpdir = basepath+'tmp_da/'
 
 def run_update(dockerlist_json, updateitem):
@@ -77,6 +78,34 @@ def run_build(dockerlist_json, dockeritem):
     shutil.rmtree(builddir)
     print('[+] Cleaning up temp build directory')
     return True
+
+def checktokenfile():
+    if not os.path.exists(tokenfile):
+        os.makedirs(os.path.dirname(tokenfile), exist_ok=True)
+        with open(tokenfile, 'w') as f:
+            json.dump({"tokenitems": {}}, f, indent=2)
+
+def gettoken(dockeritem):
+    checktokenfile()
+    with open(tokenfile, 'r') as f:
+        tokens = json.load(f)
+    token = tokens['tokenitems'].get(dockeritem, None)
+    if not token:
+        print(f'[!] No token found for {dockeritem}')
+        addtoken(dockeritem)
+        with open(tokenfile, 'r') as f:
+            tokens = json.load(f)
+        token = tokens['tokenitems'].get(dockeritem)
+    return token
+
+def addtoken(dockeritem):
+    with open(tokenfile, 'r') as f:
+        tokens = json.load(f)
+    token = input(f'[*] Enter token for {dockeritem}: ')
+    tokens['tokenitems'][dockeritem] = token
+    with open(tokenfile, 'w') as f:
+        json.dump(tokens, f, indent=2)
+    print(f'[+] Token saved for {dockeritem}')
 
 def b642file(fileb64, filename):
     with open(filename, 'w') as newfile:
@@ -136,8 +165,16 @@ def mode_run(dockeritem, args):
         imagelist = checkimage()
         if dockeritem in imagelist or dockerlist_json['dockeritems'][dockeritem][3][0] == 'DockerHub':
             print("[+] Running docker command for "+dockeritem)
-            if ' --rm ' in dockerlist_json['dockeritems'][dockeritem][1]:
-                run_cmd(dockerlist_json['dockeritems'][dockeritem][1]+' '+args)
+            cmd = dockerlist_json['dockeritems'][dockeritem][1]
+            if ' --rm ' in cmd:
+                if '[TOKEN_HERE]' in cmd:
+                    token = gettoken(dockeritem)
+                    if token:
+                        cmd = cmd.replace('[TOKEN_HERE]', token)
+                    else:
+                        print('[!] No token available, cannot run command')
+                        return
+                run_cmd(cmd+' '+args)
             else:
                 cmd = 'docker ps -a --format json'
                 if powershellcmd:
@@ -166,6 +203,13 @@ def unload_image(dockeritem, dockerlist_json):
         print("[!] ERROR processing the specified tool ("+dockeritem+").")
 
 def run_cmd(cmd):
+    if '[TOKEN_HERE]' in cmd:
+        token = gettoken(imagename)
+        if token:
+            cmd = cmd.replace('[TOKEN_HERE]', token)
+        else:
+            print('[!] No token available, cannot run command')
+            return
     if powershellcmd:
         cmd = powershellcmd+' -c \''+cmd+'\''
     os.system(cmd)
@@ -279,7 +323,7 @@ def mode_add(dockeritem, dockerfile, file, configfile, dockercomposefile):
         else:
             print('[-] Not a valid option. Quitting...')
             exit(1)
-    newitem[1] = input('\n[*] Please enter the base command used to run this container.\ne.g. docker run -it --network \"host\" --rm -v \"${PWD}:/tmp\" -v \"${HOME}/.jwt_tool:/root/.jwt_tool\" ticarpi/jwt_tool\n    Include the following:\n    [*] volume mapping "-v"\n    [*] port mapping "-p"\n    [*] environment variables "-e"\n    [*] Remove instruction "--rm"\n    [*] only use "double quotes", not \'single quotes\'\n    [*] and make sure the image referenced is: '+newitem[3][1]+'\n')
+    newitem[1] = input('\n[*] Please enter the base command used to run this container.\ne.g. docker run -it --network \"host\" --rm -v \"${PWD}:/tmp\" -v \"${HOME}/.jwt_tool:/root/.jwt_tool\" ticarpi/jwt_tool\n    Include the following:\n    [*] volume mapping "-v"\n    [*] port mapping "-p"\n    [*] private tokens/secrets (will be prompted later) "[TOKEN_HERE]"\n    [*] environment variables "-e"\n    [*] Remove instruction "--rm"\n    [*] only use "double quotes", not \'single quotes\'\n    [*] and make sure the image referenced is: '+newitem[3][1]+'\n')
     newitem[2] = input('\n[*] Please enter any useful notes for running the container, separating each note with a semicolon. e.g. "-h; PWD mapped to /tmp"\n')
     dockerlist_json['dockeritems'][dockeritem] = newitem
     with open(configfile, "w") as dockerdump:
