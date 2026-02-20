@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #
-# DockerAuto version 2.0 (12_02_2026)
+# DockerAuto version 2.1 (20_02_2026)
 # Written by Andy Tyler (@ticarpi)
 # Please use responsibly...
 # Software URL: https://github.com/ticarpi/dockerauto
 # Web: https://www.ticarpi.com
 # Twitter: @ticarpi
 
-dockerautovers = "2.0"
+dockerautovers = "2.1"
 import os
 import socket
 import re
@@ -24,6 +24,7 @@ basepath = os.path.expanduser('~/.dockerauto/')
 configfile = basepath+'dockerlist.json'
 tokenfile = basepath+'tokens.json'
 tmpdir = basepath+'tmp_da/'
+assigned_ports = []
 
 def run_update(dockerlist_json, updateitem):
     if dockerlist_json['dockeritems'][updateitem][3][0] != 'DockerHub':
@@ -82,26 +83,47 @@ def run_build(dockerlist_json, dockeritem):
     return True
 
 def check_port(port):
+    """Check if a port is available"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         sock.bind(('', port))
         sock.close()
         return True
+    except PermissionError:
+        # Port requires elevated privileges
+        return 'permission'
     except OSError:
+        # Port is in use
         return False
 
-def get_alternative_port(original_port):
-    if check_port(original_port):
+def get_alternative_port(original_port, assigned_ports, sudo_granted=False):
+    result = check_port(original_port)
+    
+    if result is True and original_port not in assigned_ports:
+        assigned_ports.append(original_port)
         return original_port
-    print(f'[!] Port {original_port} is already in use')
+    elif result == 'permission':
+        if sudo_granted:
+            # Already have sudo, no need to prompt again
+            assigned_ports.append(original_port)
+            return original_port
+        else:
+            print(f'[!] Port {original_port} requires elevated privileges')
+            use_sudo = input(f'[?] Attempt with sudo? (y/N): ')
+            if use_sudo.lower() == 'y':
+                assigned_ports.append(original_port)
+                return original_port
+    else:
+        print(f'[!] Port {original_port} is already in use')
+    
     while True:
-        new_port = input(f'[?] Enter alternative port (recommended >1024, press Enter for auto): ')
+        new_port = input(f'[?] Enter alternative port for {original_port} (press Enter for auto): ')
         if new_port == '':
-            # Auto-select a free port starting from 10000
             for port in range(10000, 65535):
-                if check_port(port):
+                if check_port(port) is True and port not in assigned_ports:
                     print(f'[+] Using auto-selected port: {port}')
+                    assigned_ports.append(port)
                     return port
         else:
             try:
@@ -109,12 +131,17 @@ def get_alternative_port(original_port):
                 if new_port < 1 or new_port > 65535:
                     print('[!] Port must be between 1-65535')
                     continue
-                if new_port < 1024:
-                    print('[!] Warning: ports <1024 may require elevated privileges')
-                if check_port(new_port):
+                result = check_port(new_port)
+                if result is True and new_port not in assigned_ports:
+                    assigned_ports.append(new_port)
                     return new_port
+                elif result == 'permission' and sudo_granted:
+                    assigned_ports.append(new_port)
+                    return new_port
+                elif new_port in assigned_ports:
+                    print(f'[!] Port {new_port} already assigned in this command')
                 else:
-                    print(f'[!] Port {new_port} is also in use, try another')
+                    print(f'[!] Port {new_port} is in use, try another')
             except ValueError:
                 print('[!] Please enter a valid port number')
 
@@ -235,9 +262,28 @@ def mode_remove(dockeritem):
         for key in dockerlist_json['dockeritems'].keys():
             print("    [*] "+key)
 
-def mode_run(dockeritem, args):
+def mode_run(dockeritem, args, alt_port=None):
     with open(configfile, "r") as dockerlist:
         dockerlist_json = json.load(dockerlist)
+    cmd = dockerlist_json['dockeritems'][dockeritem][1]
+    name_match = re.search(r'--name\s+(\S+)', cmd)
+    
+    if name_match:
+        container_name = name_match.group(1)
+        check_cmd = f'docker ps -q -f name={container_name}'
+        if powershellcmd:
+            check_cmd = powershellcmd + ' -c \'' + check_cmd + '\''
+        
+        result = os.popen(check_cmd).read().strip()
+        
+        if result:
+            print(f'[!] Container {container_name} is already running')
+            stop = input('[?] Stop it first? (y/N): ')
+            if stop.lower() == 'y':
+                mode_stop(dockeritem)
+            else:
+                print('[-] Cannot start - container already running')
+                return
     try:
         imagelist = checkimage()
         if dockeritem in imagelist or dockerlist_json['dockeritems'][dockeritem][3][0] == 'DockerHub':
@@ -251,7 +297,7 @@ def mode_run(dockeritem, args):
                     else:
                         print('[!] No token available, cannot run command')
                         return
-                run_cmd(cmd+' '+args)
+                run_cmd(cmd+' '+args, imagename=dockeritem, alt_port=alt_port)
             else:
                 cmd = 'docker ps -a --format json'
                 if powershellcmd:
@@ -279,25 +325,100 @@ def unload_image(dockeritem, dockerlist_json):
         print(f'[!] Error: {e}')
         print("[!] ERROR processing the specified tool ("+dockeritem+").")
 
-def run_cmd(cmd):
+def ensure_sudo():
+    """Get sudo access once, keep it alive for subsequent calls"""
+    import subprocess
+    print('[!] Privileged ports detected - sudo required')
+    # -v validates/refreshes sudo timestamp
+    result = subprocess.run(['sudo', '-v'], capture_output=False)
+    if result.returncode == 0:
+        print('[+] sudo access granted')
+        return True
+    else:
+        print('[-] sudo access failed')
+        return False
+
+def run_cmd(cmd, imagename=None, alt_port=None):    
+    assigned_ports = []
     port_pattern = r'-p\s+(\d+):'
     matches = re.findall(port_pattern, cmd)
-    for external_port in matches:
-        port_num = int(external_port)
-        new_port = get_alternative_port(port_num)
-        if new_port != port_num:
-            cmd = cmd.replace(f'-p {external_port}:', f'-p {new_port}:')
-            print(f'[+] Updated command to use port {new_port}')
+    needs_sudo = False
+    sudo_granted = False
+    
+    # Check all ports first before prompting for sudo
+    privileged_ports = [int(p) for p in matches if int(p) < 1024]
+    if privileged_ports:
+        sudo_granted = ensure_sudo()  # Ask once for all privileged ports
+    
+    if alt_port and matches:
+        original_port = int(matches[0])
+        cmd = cmd.replace(f'-p {original_port}:', f'-p {alt_port}:', 1)
+        print(f'[+] Using manually specified port {alt_port}')
+        assigned_ports.append(alt_port)
+        if alt_port < 1024:
+            needs_sudo = True
+    else:
+        for external_port in matches:
+            port_num = int(external_port)
+            new_port = get_alternative_port(port_num, assigned_ports, sudo_granted)
+            if new_port != port_num:
+                cmd = cmd.replace(f'-p {external_port}:', f'-p {new_port}:')
+                print(f'[+] Updated command to use port {new_port}')
+            if new_port < 1024:
+                needs_sudo = True
+            assigned_ports.append(new_port)
+        # Auto-inject --name if missing
+    if '--name' not in cmd and imagename:
+        # Find position after 'docker run' and insert --name
+        docker_run_match = re.search(r'docker\s+run\s+', cmd)
+        if docker_run_match:
+            insert_pos = docker_run_match.end()
+            cmd = cmd[:insert_pos] + f'--name {imagename} ' + cmd[insert_pos:]
+            print(f'[+] Auto-added container name: {imagename}')
     if '[TOKEN_HERE]' in cmd:
+        if imagename is None:
+            print('[!] Error: Token placeholder found but no imagename provided')
+            return
         token = gettoken(imagename)
         if token:
             cmd = cmd.replace('[TOKEN_HERE]', token)
         else:
             print('[!] No token available, cannot run command')
             return
+
     if powershellcmd:
-        cmd = powershellcmd+' -c \''+cmd+'\''
+        cmd = powershellcmd + ' -c \'' + cmd + '\''
+    elif needs_sudo:
+        if not sudo_granted:
+            sudo_granted = ensure_sudo()
+        if sudo_granted:
+            cmd = 'sudo ' + cmd
+        else:
+            print('[-] Cannot bind to privileged port without sudo')
+            return
+
+    #print('[*] Running: '+cmd+'\n')
     os.system(cmd)
+
+# def run_cmd(cmd):
+#     port_pattern = r'-p\s+(\d+):'
+#     matches = re.findall(port_pattern, cmd)
+#     for external_port in matches:
+#         port_num = int(external_port)
+#         new_port = get_alternative_port(port_num, assigned_ports)
+#         if new_port != port_num:
+#             cmd = cmd.replace(f'-p {external_port}:', f'-p {new_port}:')
+#             print(f'[+] Updated command to use port {new_port}')
+#     if '[TOKEN_HERE]' in cmd:
+#         token = gettoken(imagename)
+#         if token:
+#             cmd = cmd.replace('[TOKEN_HERE]', token)
+#         else:
+#             print('[!] No token available, cannot run command')
+#             return
+#     if powershellcmd:
+#         cmd = powershellcmd+' -c \''+cmd+'\''
+#     os.system(cmd)
 
 def mode_shell(dockeritem):
     with open(configfile, "r") as dockerlist:
@@ -368,6 +489,9 @@ def mode_add(dockeritem, dockerfile, file, configfile, dockercomposefile):
         else:
             print('[-] Not a valid option. Quitting...')
             exit(1)
+        subcat = input('[*] Enter optional subcategory (e.g., web, infra, db) or press Enter to skip:\n')
+        if subcat.strip():
+            newitem[6] = newitem[6] + '>' + subcat.strip()
         option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] No codebase to import\n')
         if option == '1':
             repourl = 'https://www.github.com/'+input('\n[*] Please enter the "user/name" of the GitHub repo for cloning (e.g. ticarpi/jwt_tool)\n')
@@ -395,6 +519,9 @@ def mode_add(dockeritem, dockerfile, file, configfile, dockercomposefile):
         else:
             print('[-] Not a valid option. Quitting...')
             exit(1)
+        subcat = input('[*] Enter optional subcategory (e.g., web, infra, db) or press Enter to skip:\n')
+        if subcat.strip():
+            newitem[6] = newitem[6] + '>' + subcat.strip()
         option = input('[*] Select which method you want to use to generate your Docker content:\n    [1] Clone a GitHub repo\n    [2] Download a zip\n    [3] Pull from DockerHub\n')
         if option == '1':
             repourl = 'https://www.github.com/'+input('\n[*] Please enter the "user/name" of the GitHub repo for cloning (e.g. ticarpi/jwt_tool)\n')
@@ -446,15 +573,45 @@ def mode_list():
         dockerlist_json = json.load(dockerlist)
         imagelist = checkimage()
         print('[+] Images in config:')
+        
+        # Build hierarchical structure
+        categories = {}
+        for key in dockerlist_json['dockeritems'].keys():
+            cat_full = dockerlist_json['dockeritems'][key][6]
+            
+            # Parse category>subcategory
+            if '>' in cat_full:
+                cat, subcat = cat_full.split('>', 1)
+            else:
+                cat, subcat = cat_full, None
+            
+            if cat not in categories:
+                categories[cat] = {}
+            if subcat not in categories[cat]:
+                categories[cat][subcat] = []
+            
+            categories[cat][subcat].append(key)
+        
+        # Display hierarchically
         for cat in ['tool', 'service', 'environment']:
+            if cat not in categories:
+                continue
+            
             print('    [*] '+cat.capitalize()+'s')
-            for key in dockerlist_json['dockeritems'].keys():
-                if dockerlist_json['dockeritems'][key][6] == cat:
+            
+            for subcat in sorted(categories[cat].keys()):
+                if subcat:
+                    print('        [*] '+subcat.capitalize())
+                    indent = '            '
+                else:
+                    indent = '        '
+                
+                for key in sorted(categories[cat][subcat]):
                     installed = ' - run \'update\' to build image'
                     imgname = dockerlist_json['dockeritems'][key][3][1]
                     if imgname in imagelist:
                         installed = ' - IMAGE INSTALLED ('+imgname+')'
-                    print("        [*] "+key+installed)
+                    print(indent+"[*] "+key+installed)
 
 def saveconfig(sourcefile, destfile):
     print('\n[+] Saving config\nfrom: '+sourcefile+'\nto: '+destfile+'\n')
@@ -513,7 +670,81 @@ def mode_install(config):
         exit(1)
     #jsonfile=os.getcwd()+'/'+config
     saveconfig(config, configfile)
+
+def mode_stop(dockeritem=None):
+    """Stop a running dockerauto container, or show all running if no argument"""
+    with open(configfile, "r") as dockerlist:
+        dockerlist_json = json.load(dockerlist)
+    
+    # If no dockeritem specified, check all containers
+    if dockeritem is None:
+        running_containers = []
         
+        for item in dockerlist_json['dockeritems'].keys():
+            cmd = dockerlist_json['dockeritems'][item][1]
+            name_match = re.search(r'--name\s+(\S+)', cmd)
+            
+            if name_match:
+                container_name = name_match.group(1)
+            else:
+                container_name = item
+            
+            # Check if container is running
+            check_cmd = f'docker ps -q -f name={container_name}'
+            if powershellcmd:
+                check_cmd = powershellcmd + ' -c \'' + check_cmd + '\''
+            
+            result = os.popen(check_cmd).read().strip()
+            
+            if result:
+                running_containers.append((item, container_name))
+        
+        if not running_containers:
+            print('[+] No DockerAuto containers currently running')
+            return
+        
+        print('[+] Running DockerAuto containers:')
+        for item, container_name in running_containers:
+            print(f'    [*] {item} (container: {container_name})')
+        
+        stop_all = input('\n[?] Stop all running containers? (y/N): ')
+        if stop_all.lower() == 'y':
+            for item, container_name in running_containers:
+                print(f'[+] Stopping {item}...')
+                stop_cmd = f'docker stop {container_name}'
+                run_cmd(stop_cmd)
+            print('[+] All DockerAuto containers stopped')
+        return
+    
+    # Stop specific container
+    if dockeritem not in dockerlist_json['dockeritems']:
+        print(f"[-] {dockeritem} not found in config")
+        return
+    
+    # Extract container name from docker command
+    cmd = dockerlist_json['dockeritems'][dockeritem][1]
+    name_match = re.search(r'--name\s+(\S+)', cmd)
+    
+    if name_match:
+        container_name = name_match.group(1)
+    else:
+        container_name = dockeritem
+    
+    # Check if container is running
+    check_cmd = f'docker ps -q -f name={container_name}'
+    if powershellcmd:
+        check_cmd = powershellcmd + ' -c \'' + check_cmd + '\''
+    
+    result = os.popen(check_cmd).read().strip()
+    
+    if result:
+        print(f'[+] Stopping {dockeritem} (container: {container_name})...')
+        stop_cmd = f'docker stop {container_name}'
+        run_cmd(stop_cmd)
+        print(f'[+] {dockeritem} stopped and removed')
+    else:
+        print(f'[-] {dockeritem} is not currently running')
+  
 def checkwsl():
     powershellcmd = ''
     for path in ['/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', '/mnt/c/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe', 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', 'C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe']:
@@ -561,6 +792,8 @@ if __name__ == '__main__':
     parser_unload = subparsers.add_parser('unload', help="Delete stored Docker images for DockerAuto items in the config - or for everything (unload ALL)")
     parser_export = subparsers.add_parser('export', help="Export the config file")
     parser_setuptokens = subparsers.add_parser('setuptokens', help="Set up tokens for all items requiring them in config (included as \"[TOKEN_HERE]\")")
+    parser_stop = subparsers.add_parser('stop', help="Stop a running DockerAuto container")
+    parser_stop.add_argument('dockeritem', type=str, nargs='?', action="store", help="Stop the selected DockerAuto container (or all if not specified)")
     parser_add.add_argument('dockeritem', type=str, action="store", help="A new DockerAuto item", default='dockerauto')
     parser_shell.add_argument('dockeritem', type=str, action="store", help="The DockerAuto image to connect to", default='dockerauto')
     parser_add.add_argument('-d', '--dockerfile', action="store", help="Dockerfile for the new DockerAuto item")
@@ -570,7 +803,8 @@ if __name__ == '__main__':
     parser_update.add_argument('dockeritem', type=str, action="store", help="Update the selected DockerAuto items (or 'update ALL' to update all Docker images)", default='ALL')
     parser_unload.add_argument('dockeritem', type=str, action="store", help="Unload the selected DockerAuto item to the config", default='ALL')
     parser_remove.add_argument('dockeritem', type=str, action="store", help="Remove the selected DockerAuto item from the config", default='ALL')
-    parser_run.add_argument('arglist', help="Arguments to use in the docker command (surround in 'single quotes' e.g. '-u https://example.com -X GET')", nargs='*')
+    #parser_run.add_argument('arglist', help="Arguments to use in the docker command (surround in 'single quotes' e.g. '-u https://example.com -X GET')", nargs='*')
+    parser_run.add_argument('arglist', help="Arguments to use in the docker command", nargs=argparse.REMAINDER)
     parser_info.add_argument('dockeritem', type=str, action="store", help="Info about selected DockerAuto items", default='dockerauto')
     parser_install.add_argument("-c", "--config", action="store", help="URL or local filepath to grab your custom DockerAuto config from", required=False, default='example.dockerlist.json')
     args = parser.parse_args()
@@ -591,14 +825,17 @@ if __name__ == '__main__':
         mode_remove(args.dockeritem)
     elif args.mode == 'list':
         mode_list()
+    elif args.mode == 'stop':
+        mode_stop(args.dockeritem)
     elif args.mode == 'export':
         mode_export()
     elif args.mode == 'setuptokens':
         setuptokens()
     elif args.mode == 'run':
-        arglist = ''
         if args.arglist:
-            arglist = args.arglist[0] 
+            arglist = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in args.arglist)
+        else:
+            arglist = ''
         mode_run(args.dockeritem, arglist)
     elif args.mode == 'add':
         if args.dockerfile and args.dockercomposefile:
